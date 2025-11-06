@@ -1,0 +1,72 @@
+name: Semgrep
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [ main, master, develop ]
+
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: write
+
+jobs:
+  semgrep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: Show .semgrep.yml (if present)
+        run: |
+          if [ -f ".semgrep.yml" ]; then cat .semgrep.yml; else echo "No .semgrep.yml (use auto)"; fi
+
+      - name: Run Semgrep via Semgrep Cloud (if token)
+        if: env.SEMGREP_APP_TOKEN != ''
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: auto
+          generateSarif: "1"
+          sarifFile: semgrep.sarif
+          comment: true
+          exclude: |
+            node_modules
+            vendor
+            .git
+            .github
+            dist
+            build
+            coverage
+
+      - name: Upload SARIF (Cloud)
+        if: env.SEMGREP_APP_TOKEN != '' && hashFiles('semgrep.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with: { sarif_file: semgrep.sarif }
+
+      - name: Set up Python (CLI mode)
+        if: env.SEMGREP_APP_TOKEN == ''
+        uses: actions/setup-python@v5
+        with: { python-version: '3.x' }
+
+      - name: Install Semgrep (CLI)
+        if: env.SEMGREP_APP_TOKEN == ''
+        run: pip install --upgrade pip semgrep
+
+      - name: Run Semgrep (CLI | SARIF)
+        if: env.SEMGREP_APP_TOKEN == ''
+        run: |
+          CONFIG="--config .semgrep.yml"
+          if [ ! -f ".semgrep.yml" ]; then CONFIG="--config auto"; fi
+          semgrep $CONFIG \
+            --exclude node_modules --exclude vendor --exclude .git --exclude .github \
+            --error --sarif --output semgrep.sarif
+
+      - name: Upload SARIF (CLI)
+        if: env.SEMGREP_APP_TOKEN == ''
+        uses: github/codeql-action/upload-sarif@v3
+        with: { sarif_file: semgrep.sarif }
