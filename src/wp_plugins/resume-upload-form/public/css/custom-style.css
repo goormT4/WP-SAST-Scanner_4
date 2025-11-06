@@ -1,0 +1,59 @@
+/* Plugin Name: Resume Upload & Author: mbbhatti */
+/* Table */
+ #customers {
+     font-family: "Trebuchet MS", Arial, Helvetica, sans-serif;
+     border-collapse: collapse;
+     width: 100%;
+}
+ #customers td, #customers th {
+     border: 1px solid #ddd;
+     padding: 8px;
+}
+ #customers tr:nth-child(even){
+    background-color: #f2f2f2;
+}
+ #customers tr:hover {
+    background-color: #ddd;
+}
+ #customers th {
+     padding-top: 12px;
+     padding-bottom: 12px;
+     text-align: left;
+     background-color: #4CAF50;
+     color: white;
+}
+/* Form */
+ .mark-style{
+     color:red;
+     font-weight: bold;
+}
+ .success-style{
+     color:green;
+     margin: 2% 2%;
+}
+ .error-style{
+     color:red;
+     margin: 2% 2%;
+}
+ .error {
+     color: red;
+}
+ #refreshimg{
+     cursor: pointer;
+     color: #4CAF50;
+}
+/* File */
+ .upload-btn-wrapper {
+     position: relative;
+     overflow: hidden;
+     display: inline-block;
+}
+ .upload-btn-wrapper input[type=file] {
+     font-size: 27px;
+     position: absolute;
+     left: 0;
+     top: 0;
+     opacity: 0;
+     margin: 12px 0;
+     width: 100%;
+}
