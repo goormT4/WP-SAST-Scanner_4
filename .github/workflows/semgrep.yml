@@ -66,6 +66,23 @@ jobs:
             sed -n '1,200p' "$CONFIG_FILE"
           fi
 
+
+
+      - name: Run Semgrep
+        run: |
+          set -e
+          echo "=== Scanning target files ==="
+          ls -R src/wp-plugin || true
+          echo "=== Running Semgrep with custom rules ==="
+          semgrep scan \
+            --config ".semgrep/.semgrep.yml" \
+            --metrics=off --timeout 10 \
+            --sarif -o reports/semgrep.sarif \
+            --verbose \
+            --debug \
+            src/wp-plugin
+
+
       # JSON 출력 (에러 숨김 없음)
       - name: Semgrep JSON (debug mode — show stderr)
         shell: bash
