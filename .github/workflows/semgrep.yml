@@ -68,59 +68,73 @@ jobs:
 
 
 
-      - name: Run Semgrep
+      - name: Run Semgrep (JSON, no verbose/debug)
         run: |
-          set -e
-          echo "=== Scanning target files ==="
-          ls -R src/wp_plugins || true
-          echo "=== Running Semgrep with custom rules ==="
-          semgrep scan \
-            --config ".semgrep/.semgrep.yml" \
-            --metrics=off --timeout 10 \
-            --sarif -o reports/semgrep.sarif \
-            --verbose \
-            --debug \
-            src/wp_plugins
-
-
-      # JSON 출력 (에러 숨김 없음)
-      - name: Semgrep JSON (debug mode — show stderr)
-        shell: bash
-        run: |
-          set -x
-          echo "=== semgrep version ==="
-          semgrep --version || true
-          echo
-
-          echo "=== show CONFIG env ==="
-          echo "CONFIG='$CONFIG'"
-          echo
-
-          echo "=== list .semgrep dir & files ==="
-          ls -la .semgrep || true
-          echo "=== show .semgrep/.semgrep.yml ==="
-          sed -n '1,200p' .semgrep/.semgrep.yml || true
-          echo
-
-          echo "=== attempt semgrep with --debug (capture stdout/stderr) ==="
           mkdir -p reports
-          semgrep scan --config "$CONFIG" --metrics=off --timeout 10 --json -o reports/semgrep.json --debug > reports/semgrep-debug.out 2> reports/semgrep-debug.err || true
+          # choose config explicitly if you want, else use auto packs
+          CFG=".semgrep/.semgrep.yml"
+          if [ ! -f "$CFG" ]; then CFG="auto"; fi
+          echo "Using config: $CFG"
 
-          echo "---- semgrep stdout (last 200 lines) ----"
-          tail -n 200 reports/semgrep-debug.out || true
-          echo "---- semgrep stderr (last 200 lines) ----"
-          tail -n 200 reports/semgrep-debug.err || true
-
-          if [ -s reports/semgrep.json ]; then
-            echo "JSON produced with $(jq '.results | length' reports/semgrep.json) results"
+          # JSON run (no --verbose / --debug)
+          if [ "$CFG" = "auto" ]; then
+            semgrep scan --config p/php --config p/security-audit --config p/secrets \
+              --metrics=off --timeout 60 --json -o reports/semgrep.json src/wp_plugins
           else
-            echo "No JSON produced"
+            semgrep scan --config "$CFG" --metrics=off --timeout 60 --json -o reports/semgrep.json src/wp_plugins
           fi
 
-          # fail if semgrep exit code was non-zero (remove if you want it to continue)
-          RET=$?
-          echo "SEMgrep exit code: $RET"
-          exit $RET
+      - name: Run Semgrep (SARIF, no verbose/debug)
+        run: |
+          mkdir -p reports
+          CFG=".semgrep/.semgrep.yml"
+          if [ ! -f "$CFG" ]; then CFG="auto"; fi
+
+          if [ "$CFG" = "auto" ]; then
+            semgrep scan --config p/php --config p/security-audit --config p/secrets \
+              --metrics=off --timeout 60 --sarif -o reports/semgrep.sarif src/wp_plugins
+          else
+            semgrep scan --config "$CFG" --metrics=off --timeout 60 --sarif -o reports/semgrep.sarif src/wp_plugins
+          fi
+
+            # JSON 출력 (에러 숨김 없음)
+            - name: Semgrep JSON (debug mode — show stderr)
+              shell: bash
+              run: |
+                set -x
+                echo "=== semgrep version ==="
+                semgrep --version || true
+                echo
+
+                echo "=== show CONFIG env ==="
+                echo "CONFIG='$CONFIG'"
+                echo
+
+                echo "=== list .semgrep dir & files ==="
+                ls -la .semgrep || true
+                echo "=== show .semgrep/.semgrep.yml ==="
+                sed -n '1,200p' .semgrep/.semgrep.yml || true
+                echo
+
+                echo "=== attempt semgrep with --debug (capture stdout/stderr) ==="
+                mkdir -p reports
+                semgrep scan --config "$CONFIG" --metrics=off --timeout 10 --json -o reports/semgrep.json --debug > reports/semgrep-debug.out 2> reports/semgrep-debug.err || true
+
+                echo "---- semgrep stdout (last 200 lines) ----"
+                tail -n 200 reports/semgrep-debug.out || true
+                echo "---- semgrep stderr (last 200 lines) ----"
+                tail -n 200 reports/semgrep-debug.err || true
+
+                if [ -s reports/semgrep.json ]; then
+                  echo "JSON produced with $(jq '.results | length' reports/semgrep.json) results"
+                else
+                  echo "No JSON produced"
+                fi
+
+                # fail if semgrep exit code was non-zero (remove if you want it to continue)
+                RET=$?
+                echo "SEMgrep exit code: $RET"
+                exit $RET
 
 
       # Semgrep SARIF (시도하되 실패해도 에러 출력 파일을 남기고 계속 진행)
