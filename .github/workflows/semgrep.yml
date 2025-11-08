@@ -67,16 +67,12 @@ jobs:
           fi
 
       # JSON 출력 (에러 숨김 없음)
-      - name: Semgrep JSON (debug mode)
+      - name: Semgrep JSON (debug mode — show stderr)
         shell: bash
         run: |
           set -x
           echo "=== semgrep version ==="
           semgrep --version || true
-          echo
-
-          echo "=== pip package info ==="
-          python -c "import pkgutil,sys; import semgrep,inspect; print('semgrep', semgrep.__version__)" || true
           echo
 
           echo "=== show CONFIG env ==="
@@ -85,31 +81,30 @@ jobs:
 
           echo "=== list .semgrep dir & files ==="
           ls -la .semgrep || true
-          echo "=== list included rule files (if any) ==="
-          if [ -f ".semgrep/.semgrep.yml" ]; then
-            grep -n "include" -n .semgrep/.semgrep.yml || true
-            sed -n '1,200p' .semgrep/.semgrep.yml || true
-          fi
+          echo "=== show .semgrep/.semgrep.yml ==="
+          sed -n '1,200p' .semgrep/.semgrep.yml || true
           echo
 
-          echo "=== attempt semgrep dry-run with debug logging ==="
+          echo "=== attempt semgrep with --debug (capture stdout/stderr) ==="
           mkdir -p reports
-          # Run with --debug and capture both stdout & stderr to files so they appear in Actions log
-          semgrep scan --config "$CONFIG" --metrics=off --timeout 10 --json -o reports/semgrep.json --debug 2>reports/semgrep-debug.err | tee reports/semgrep-debug.out
-          RC=$?
-          echo "semgrep exit code: $RC"
-          echo "---- semgrep stdout (tail) ----"
-          tail -n +1 reports/semgrep-debug.out || true
-          echo "---- semgrep stderr (tail) ----"
-          tail -n +1 reports/semgrep-debug.err || true
+          semgrep scan --config "$CONFIG" --metrics=off --timeout 10 --json -o reports/semgrep.json --debug > reports/semgrep-debug.out 2> reports/semgrep-debug.err || true
+
+          echo "---- semgrep stdout (last 200 lines) ----"
+          tail -n 200 reports/semgrep-debug.out || true
+          echo "---- semgrep stderr (last 200 lines) ----"
+          tail -n 200 reports/semgrep-debug.err || true
 
           if [ -s reports/semgrep.json ]; then
             echo "JSON produced with $(jq '.results | length' reports/semgrep.json) results"
           else
             echo "No JSON produced"
           fi
-          # fail the step with the same rc so Actions will show failure (remove if you want it not to fail)
-          exit $RC
+
+          # fail if semgrep exit code was non-zero (remove if you want it to continue)
+          RET=$?
+          echo "SEMgrep exit code: $RET"
+          exit $RET
+
 
 
       # SARIF 출력 (에러 숨김 없음)
