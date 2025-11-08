@@ -26,8 +26,9 @@ jobs:
         run: |
           echo "Repo root: $PWD"
           find . -type f -name "*.php" | head -n 200
-          echo "Total PHP files:" 
+          echo "Total PHP files:"
           find . -type f -name "*.php" | wc -l
+        shell: bash
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -38,41 +39,33 @@ jobs:
         run: |
           pip install --upgrade pip semgrep
           sudo apt-get update && sudo apt-get install -y jq
+        shell: bash
 
       - name: Prepare config & reports dir
-        shell: bash
         run: |
-          set -e
-          if [ -f ".semgrep/.semgrep.yml" ]; then
-            CONFIG_FILE=".semgrep/.semgrep.yml"
-          elif [ -f ".semgrep.yml" ]; then
-            CONFIG_FILE=".semgrep.yml"
-          else
-            CONFIG_FILE="auto"
-          fi
-          echo "CONFIG=$CONFIG_FILE" >> "$GITHUB_ENV"
+          set -euo pipefail
           mkdir -p reports
-
+          if [ -f ".semgrep/.semgrep.yml" ]; then
+            CONFIG=".semgrep/.semgrep.yml"
+          elif [ -f ".semgrep.yml" ]; then
+            CONFIG=".semgrep.yml"
+          else
+            CONFIG="auto"
+          fi
+          echo "CONFIG=$CONFIG" >> "$GITHUB_ENV"
           echo "== CONFIG chosen =="
-          echo "$CONFIG_FILE"
-
+          echo "$CONFIG"
           echo "== List .semgrep dir (if any) =="
           ls -la .semgrep || true
-
-          echo "== Show config (first 200 lines) =="
-          if [ -f "$CONFIG_FILE" ]; then
-            head -n 200 "$CONFIG_FILE"
-          fi
-
-      - name: Run Semgrep JSON
         shell: bash
+
+      - name: Run Semgrep JSON Scan
         run: |
-          set -e
+          set -euo pipefail
           export LC_ALL=en_US.UTF-8
           export LANG=en_US.UTF-8
           export PYTHONUTF8=1
 
-          mkdir -p reports
           if [ "$CONFIG" = "auto" ]; then
             semgrep scan \
               --config p/php \
@@ -87,17 +80,15 @@ jobs:
               --metrics=off \
               --timeout 60 \
               --json -o reports/semgrep.json src/wp_plugins
-          fi
-
-      - name: Run Semgrep SARIF
         shell: bash
+
+      - name: Run Semgrep SARIF Scan
         run: |
-          set -e
+          set -euo pipefail
           export LC_ALL=en_US.UTF-8
           export LANG=en_US.UTF-8
           export PYTHONUTF8=1
 
-          mkdir -p reports
           if [ "$CONFIG" = "auto" ]; then
             semgrep scan \
               --config p/php \
@@ -112,33 +103,7 @@ jobs:
               --metrics=off \
               --timeout 60 \
               --sarif -o reports/semgrep.sarif src/wp_plugins
-          fi
-
-      - name: Upload SARIF (if exists)
-        if: always()
         shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if [ -f reports/semgrep.sarif ]; then
-            echo "Uploading SARIF to GitHub code scanning..."
-            gh api --method POST -H "Accept: application/vnd.github+json" \
-              /repos/${{ github.repository }}/code-scanning/sarifs \
-              -F "sarif=@reports/semgrep.sarif" \
-              -F "commit_sha=${{ github.sha }}" || true
-          else
-            echo "No SARIF found — skipping upload"
-            ls -la reports || true
-          fi
-
-      - name: Upload artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: semgrep-reports
-          path: reports/*
-          if-no-files-found: warn
-          retention-days: 14
 
       - name: Write Semgrep Markdown Summary
         if: always()
@@ -156,12 +121,35 @@ jobs:
 
             echo -e "\n### Top findings (up to 10)\n" >> "$GITHUB_STEP_SUMMARY"
             jq -r '
-              .results[] 
-              | {check_id, path: .path, start: .start.line, message: .extra.message, severity: .extra.severity} 
+              .results[]
+              | {check_id, path: .path, start: .start.line, message: .extra.message, severity: .extra.severity}
               | "| \(.severity) | \(.check_id) | \(.path):\(.start) | \(.message | gsub("\\n"; " ")) |"
             ' reports/semgrep.json | head -n 10 >> "$GITHUB_STEP_SUMMARY"
-
           else
             echo "- Semgrep produced no JSON (likely no matching files). Check the PHP file listing step." >> "$GITHUB_STEP_SUMMARY"
-          fi
-        shell: /usr/bin/bash
+        shell: bash
+
+      - name: Upload SARIF
+        if: always()
+        run: |
+          if [ -f reports/semgrep.sarif ]; then
+            echo "Uploading SARIF to GitHub code scanning..."
+            gh api --method POST -H "Accept: application/vnd.github+json" \
+              /repos/${{ github.repository }}/code-scanning/sarifs \
+              -F "sarif=@reports/semgrep.sarif" \
+              -F "commit_sha=${{ github.sha }}" || true
+          else
+            echo "No SARIF found — skipping upload"
+            ls -la reports || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-reports
+          path: reports/*
+          if-no-files-found: warn
+          retention-days: 14
