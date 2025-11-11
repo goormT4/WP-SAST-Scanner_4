@@ -34,3 +34,5 @@
       - pattern: vprintf($F, $SINKS);
       - pattern: echo sprintf($F, $SINK, ...);
       - pattern: print sprintf($F, $SINK, ...);
+
+

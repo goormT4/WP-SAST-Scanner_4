@@ -1,6 +1,6 @@
-# .semgrep/.semgrep.yml
+﻿# .semgrep/.semgrep.yml
 # ---------------------
-# 공식 packs
+# 怨듭떇 packs
 configs:
   - p/ci
   - p/security-audit
@@ -8,13 +8,13 @@ configs:
   - p/php
   - p/javascript
 
-# 로컬 규칙을 최상위 rules 아래 포함
+# 濡쒖뺄 洹쒖튃??理쒖긽??rules ?꾨옒 ?ы븿
 rules:
   - include: .semgrep/rules-xss.yml
   - include: .semgrep/rules-upload.yml
   - include: .semgrep/rules-sensitive.yml
 
-# 기본 제외
+# 湲곕낯 ?쒖쇅
 exclude:
   - node_modules
   - vendor
@@ -26,8 +26,9 @@ exclude:
   - wp-includes/**
   - wp-admin/**
 
-# 검사할 경로
+# 寃?ы븷 寃쎈줈
 paths:
   include:
     - "src/**"
     - "**/*.php"
+
