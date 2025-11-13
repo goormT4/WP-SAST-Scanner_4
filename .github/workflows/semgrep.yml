@@ -1,4 +1,4 @@
-name: Semgrep CI
+name: Semgrep Scan
 
 on:
   push:
@@ -14,60 +14,101 @@ permissions:
 jobs:
   semgrep:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Set up Python
+      - name: List PHP files
+        run: |
+          echo "Repo root: $PWD"
+          find . -type f -name "*.php" | head -n 200
+          echo "Total PHP files:" $(find . -type f -name "*.php" | wc -l)
+
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: "3.x"
 
       - name: Install Semgrep & jq
         run: |
           pip install --upgrade pip semgrep
           sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Normalize .semgrep YAML files
+      - name: Prepare reports & debug dirs
         run: |
-          for f in .semgrep/*.yml; do
-            [ -f "$f" ] || continue
-            sed -i '1s/^\xEF\xBB\xBF//' "$f"
-          done
+          mkdir -p reports debug_out
 
-      - name: Run Semgrep scan
+      - name: Run Semgrep with debug & JSON/SARIF output
+        shell: bash
         run: |
-          mkdir -p reports
+          set -euo pipefail
+          export LC_ALL=en_US.UTF-8
+          export LANG=en_US.UTF-8
+          export PYTHONUTF8=1
+
           semgrep scan \
             --config .semgrep/packs-only.yml \
             --config .semgrep/local-rules.yml \
             --metrics=off \
             --timeout 60 \
-            --json -o reports/semgrep.json src/wp_plugins
+            --json -o reports/semgrep.json \
+            --sarif -o reports/semgrep.sarif \
+            --debug > debug_out/semgrep.out 2> debug_out/semgrep.err || true
 
-      - name: Summarize findings
+          echo "reports listing:"
+          ls -la reports
+          echo "reports/semgrep.json exists?"; [ -f reports/semgrep.json ] && echo yes || echo no
+          echo "reports/semgrep.sarif exists?"; [ -f reports/semgrep.sarif ] && echo yes || echo no
+
+      - name: Validate JSON results
+        shell: bash
         run: |
-          echo "## 🧪 Semgrep Summary" >> "$GITHUB_STEP_SUMMARY"
-          if [ -s reports/semgrep.json ]; then
+          if [ -s reports/semgrep.json ] && jq empty reports/semgrep.json 2>/dev/null; then
             TOTAL=$(jq '.results | length // 0' reports/semgrep.json)
-            echo "- Total findings: **$TOTAL**" >> "$GITHUB_STEP_SUMMARY"
+            echo "Total findings: $TOTAL"
           else
-            echo "- No results found. Check PHP files and rules." >> "$GITHUB_STEP_SUMMARY"
+            echo "reports/semgrep.json missing or invalid; check debug_out/semgrep.err"
           fi
 
-      - name: Upload SARIF
+      - name: Write Markdown Summary
+        shell: bash
+        run: |
+          echo "## 🧪 Semgrep Summary" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -s reports/semgrep.json ] && jq empty reports/semgrep.json 2>/dev/null; then
+            TOTAL=$(jq '.results | length // 0' reports/semgrep.json)
+            echo "- Total findings: **$TOTAL**" >> "$GITHUB_STEP_SUMMARY"
+
+            for sev in ERROR WARNING INFO; do
+              COUNT=$(jq --arg sev "$sev" '[.results[] | select(.extra.severity==$sev)] | length' reports/semgrep.json)
+              echo "  - $sev: **$COUNT**" >> "$GITHUB_STEP_SUMMARY"
+            done
+
+            echo -e "\n### Top findings (up to 10)\n" >> "$GITHUB_STEP_SUMMARY"
+            jq -r '
+              .results[]
+              | {check_id, path: .path, start: .start.line, message: .extra.message, severity: .extra.severity}
+              | "| \(.severity) | \(.check_id) | \(.path):\(.start) | \(.message | gsub("\\n"; " ")) |"
+            ' reports/semgrep.json | head -n 10 >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- Semgrep produced no JSON (likely no matching files). Check the PHP file listing step." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload SARIF to GitHub Code Scanning
+        if: always()
+        shell: bash
         run: |
           if [ -f reports/semgrep.sarif ]; then
+            echo "Uploading SARIF to GitHub..."
             gh api --method POST -H "Accept: application/vnd.github+json" \
               /repos/${{ github.repository }}/code-scanning/sarifs \
               -F "sarif=@reports/semgrep.sarif" \
               -F "commit_sha=${{ github.sha }}" || true
           else
             echo "No SARIF found — skipping upload"
-          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
