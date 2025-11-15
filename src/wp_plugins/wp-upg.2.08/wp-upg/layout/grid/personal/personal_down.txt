@@ -1,2 +1,0 @@
-<hr>
-Personal Footer

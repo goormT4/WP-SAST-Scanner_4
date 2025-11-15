@@ -1,2 +1,0 @@
-While update, only personal_config.php & all txt files remains.
-Other files will be created automatically after first page refreshes.
