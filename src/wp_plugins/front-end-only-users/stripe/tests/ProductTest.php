@@ -104,7 +104,7 @@ class ProductSKUOrderTest extends TestCase
 
     public function testOrderCreateUpdateRetrievePayReturn()
     {
-        Stripe::setApiKey('sk_test_JieJALRz7rPz7boV17oMma7a');
+        Stripe::setApiKey('sk_test_dummy_key_removed_for_security');
         $ProductID = 'silver-' . self::generateRandomString(20);
         $p = Product::create(array(
             'name'      => 'Silver Product',
